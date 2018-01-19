@@ -17,16 +17,36 @@ from read_data import ChestXrayDataSet
 from sklearn.metrics import roc_auc_score
 
 
-CKPT_PATH = 'model.pth.tar'
+CKPT_PATH = '/home/smirnvla/PycharmProjects/pytorch-chexnet/model.pth.tar'
 N_CLASSES = 14
-CLASS_NAMES = [ 'Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule', 'Pneumonia',
-                'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis', 'Pleural_Thickening', 'Hernia']
-DATA_DIR = './ChestX-ray14/images'
-TEST_IMAGE_LIST = './ChestX-ray14/labels/test_list.txt'
+CLASS_NAMES = ['Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule', 'Pneumonia',
+               'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis', 'Pleural_Thickening', 'Hernia']
+DATA_DIR = '/home/smirnvla/PycharmProjects/pytorch-chexnet/chestx-ray-data/images'
+TEST_IMAGE_LIST = '/home/smirnvla/PycharmProjects/pytorch-chexnet/chestx-ray-data/labels/short_test_list.txt'
 BATCH_SIZE = 64
+
+EVAL_MODE = False
+
+normalize = transforms.Normalize([0.485, 0.456, 0.406],
+                                 [0.229, 0.224, 0.225])
+transform = transforms.Compose([
+    transforms.Resize(256),
+    transforms.TenCrop(224),
+    transforms.Lambda
+    (lambda crops: torch.stack([transforms.ToTensor()(crop) for crop in crops])),
+    transforms.Lambda
+    (lambda crops: torch.stack([normalize(crop) for crop in crops]))
+])
 
 
 def main():
+
+    if EVAL_MODE:
+        test_dataset = ('', '')
+    else:
+        test_dataset = ChestXrayDataSet(data_dir=DATA_DIR,
+                                        image_list_file=TEST_IMAGE_LIST,
+                                        transform=transform)
 
     cudnn.benchmark = True
 
@@ -42,19 +62,6 @@ def main():
     else:
         print("=> no checkpoint found")
 
-    normalize = transforms.Normalize([0.485, 0.456, 0.406],
-                                     [0.229, 0.224, 0.225])
-
-    test_dataset = ChestXrayDataSet(data_dir=DATA_DIR,
-                                    image_list_file=TEST_IMAGE_LIST,
-                                    transform=transforms.Compose([
-                                        transforms.Resize(256),
-                                        transforms.TenCrop(224),
-                                        transforms.Lambda
-                                        (lambda crops: torch.stack([transforms.ToTensor()(crop) for crop in crops])),
-                                        transforms.Lambda
-                                        (lambda crops: torch.stack([normalize(crop) for crop in crops]))
-                                    ]))
     test_loader = DataLoader(dataset=test_dataset, batch_size=BATCH_SIZE,
                              shuffle=False, num_workers=8, pin_memory=True)
 
