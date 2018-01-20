@@ -6,26 +6,28 @@ The main CheXNet model implementation.
 
 
 import os
-import numpy as np
+import json
 import torch
-import torch.nn as nn
-import torch.backends.cudnn as cudnn
-import torchvision
+import sklearn
 import torchvision.transforms as transforms
-from torch.utils.data import DataLoader
-from read_data import ChestXrayDataSet
-from sklearn.metrics import roc_auc_score
 
 
-CKPT_PATH = '/home/smirnvla/PycharmProjects/pytorch-chexnet/model.pth.tar'
+from classes.dataset import ChestXrayDataSet
+from classes.densenet import DenseNet121
+
+
 N_CLASSES = 14
+
+CKPT_PATH = '/workspace/pytorch-chexnet/classes/model.pth.tar'
+
 CLASS_NAMES = ['Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule', 'Pneumonia',
                'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis', 'Pleural_Thickening', 'Hernia']
-DATA_DIR = '/home/smirnvla/PycharmProjects/pytorch-chexnet/chestx-ray-data/images'
-TEST_IMAGE_LIST = '/home/smirnvla/PycharmProjects/pytorch-chexnet/chestx-ray-data/labels/short_test_list.txt'
-BATCH_SIZE = 64
 
-EVAL_MODE = False
+DATA_DIR = '/home/smirnvla/PycharmProjects/pytorch-chexnet/chestx-ray-data/images'
+
+TEST_IMAGE_LIST = '/home/smirnvla/PycharmProjects/pytorch-chexnet/chestx-ray-data/labels/short_test_list.txt'
+
+BATCH_SIZE = 64
 
 normalize = transforms.Normalize([0.485, 0.456, 0.406],
                                  [0.229, 0.224, 0.225])
@@ -39,20 +41,21 @@ transform = transforms.Compose([
 ])
 
 
-def main():
+def process(image_list=None):
 
-    if EVAL_MODE:
-        test_dataset = ('', '')
-    else:
-        test_dataset = ChestXrayDataSet(data_dir=DATA_DIR,
-                                        image_list_file=TEST_IMAGE_LIST,
-                                        transform=transform)
+    if image_list is None:
+        image_list = TEST_IMAGE_LIST
 
-    cudnn.benchmark = True
+    test_dataset = ChestXrayDataSet(data_dir=DATA_DIR,
+                                    image_list=image_list,
+                                    transform=transform)
+
+    torch.backends.cudnn.benchmark = True
 
     # initialize and load the model
     model = DenseNet121(N_CLASSES).cuda()
-    model = torch.nn.DataParallel(model).cuda()
+    model = torch.nn.DataParallel(model, device_ids=[0])
+    # model = torch.backends.cudnn.convert(model, torch.nn)
 
     if os.path.isfile(CKPT_PATH):
         print("=> loading checkpoint")
@@ -62,8 +65,8 @@ def main():
     else:
         print("=> no checkpoint found")
 
-    test_loader = DataLoader(dataset=test_dataset, batch_size=BATCH_SIZE,
-                             shuffle=False, num_workers=8, pin_memory=True)
+    test_loader = torch.utils.data.DataLoader(dataset=test_dataset, batch_size=BATCH_SIZE,
+                                              shuffle=False, num_workers=8, pin_memory=True)
 
     # initialize the ground truth and output tensor
     gt = torch.FloatTensor()
@@ -83,11 +86,24 @@ def main():
         output_mean = output.view(bs, n_crops, -1).mean(1)
         pred = torch.cat((pred, output_mean.data), 0)
 
-    AUROCs = compute_AUCs(gt, pred)
-    AUROC_avg = np.array(AUROCs).mean()
-    print('The average AUROC is {AUROC_avg:.3f}'.format(AUROC_avg=AUROC_avg))
-    for i in range(N_CLASSES):
-        print('The AUROC of {} is {}'.format(CLASS_NAMES[i], AUROCs[i]))
+    # return pred
+    pred = pred.double().cpu().numpy()[0]
+
+    ret = []
+    i = 0
+    for class_name in CLASS_NAMES:
+        ret.append({
+            class_name: pred[i]
+        })
+        # ret[class_name] = pred[i]
+        i += 1
+
+    return json.dumps(ret, separators=(',', ':'), sort_keys=True, indent=4)
+    # AUROCs = compute_AUCs(gt, pred)
+    # AUROC_avg = np.array(AUROCs).mean()
+    # print('The average AUROC is {AUROC_avg:.3f}'.format(AUROC_avg=AUROC_avg))
+    # for i in range(N_CLASSES):
+    #     print('The AUROC of {} is {}'.format(CLASS_NAMES[i], AUROCs[i]))
 
 
 def compute_AUCs(gt, pred):
@@ -107,30 +123,7 @@ def compute_AUCs(gt, pred):
     gt_np = gt.cpu().numpy()
     pred_np = pred.cpu().numpy()
     for i in range(N_CLASSES):
-        AUROCs.append(roc_auc_score(gt_np[:, i], pred_np[:, i]))
+        AUROCs.append(sklearn.metrics.roc_auc_score(gt_np[:, i], pred_np[:, i]))
     return AUROCs
 
 
-class DenseNet121(nn.Module):
-    """Model modified.
-
-    The architecture of our model is the same as standard DenseNet121
-    except the classifier layer which has an additional sigmoid function.
-
-    """
-    def __init__(self, out_size):
-        super(DenseNet121, self).__init__()
-        self.densenet121 = torchvision.models.densenet121(pretrained=True)
-        num_ftrs = self.densenet121.classifier.in_features
-        self.densenet121.classifier = nn.Sequential(
-            nn.Linear(num_ftrs, out_size),
-            nn.Sigmoid()
-        )
-
-    def forward(self, x):
-        x = self.densenet121(x)
-        return x
-
-
-if __name__ == '__main__':
-    main()

@@ -4,32 +4,39 @@
 Read images and corresponding labels.
 """
 
-import torch
-from torch.utils.data import Dataset
-from PIL import Image
 import os
+import torch
+import numpy as np
+
+from PIL import Image
 
 
-class ChestXrayDataSet(Dataset):
-    def __init__(self, data_dir, image_list_file, transform=None):
+class ChestXrayDataSet(torch.utils.data.Dataset):
+    def __init__(self, data_dir, image_list, transform=None):
         """
         Args:
             data_dir: path to image directory.
-            image_list_file: path to the file containing images
+            image_list: path to the file containing images
                 with corresponding labels.
             transform: optional transform to be applied on a sample.
         """
+
         image_names = []
         labels = []
-        with open(image_list_file, "r") as f:
-            for line in f:
-                items = line.split()
-                image_name = items[0]
-                label = items[1:]
-                label = [int(i) for i in label]
-                image_name = os.path.join(data_dir, image_name)
-                image_names.append(image_name)
-                labels.append(label)
+
+        if isinstance(image_list, (list, tuple)):
+            image_names = image_list
+            labels = np.zeros([1, 14])
+        else:
+            with open(image_list, "r") as f:
+                for line in f:
+                    items = line.split()
+                    image_name = items[0]
+                    label = items[1:]
+                    label = [int(i) for i in label]
+                    image_name = os.path.join(data_dir, image_name)
+                    image_names.append(image_name)
+                    labels.append(label)
 
         self.image_names = image_names
         self.labels = labels
@@ -48,7 +55,7 @@ class ChestXrayDataSet(Dataset):
         label = self.labels[index]
         if self.transform is not None:
             image = self.transform(image)
-        return image, torch.FloatTensor(label)
+        return image, torch.FloatTensor(label).cpu()
 
     def __len__(self):
         return len(self.image_names)

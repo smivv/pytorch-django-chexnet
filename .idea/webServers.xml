@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="2c040c41-f50e-4131-905d-6df41fde18cc" name="Google Cloud" url="http://54.154.159.79">
+        <fileTransfer host="54.154.159.79" port="22" privateKey="$USER_HOME$/Downloads/x-raydl.pem" rootFolder="/workspace/pytorch-chexnet" accessType="SFTP" keyPair="true">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" />
+          </advancedOptions>
+          <option name="port" value="22" />
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>

@@ -3,6 +3,8 @@ import os
 from django.http import HttpResponse
 from django.shortcuts import render
 
+from classes.model import process
+
 current_dir = os.path.dirname(os.path.realpath(__file__))
 
 
@@ -12,22 +14,20 @@ def index(request):
 
 def handle(request):
     if request.method == 'POST':
-        handle_uploaded_file(request.FILES['image'], str(request.FILES['image']))
-        return HttpResponse("Successful")
+        if not os.path.isdir(os.path.join(current_dir, 'uploads')):
+            os.mkdir(os.path.join(current_dir, '..', 'uploads'))
+
+        path = os.path.join(current_dir, 'uploads', str(request.FILES['image']))
+
+        with open(path, 'wb+') as destination:
+            for chunk in request.FILES['image'].chunks():
+                destination.write(chunk)
+
+        pred = process([path])
+
+        os.remove(path)
+
+        return HttpResponse(pred)
+        # return render(request, 'index/result.html')
 
     return HttpResponse("Failed")
-
-
-def handle_uploaded_file(file, filename):
-    if not os.path.join(current_dir, '..', 'uploads'):
-        os.mkdir(os.path.join(current_dir, '..', 'uploads'))
-
-    path = os.path.join(current_dir, '..', 'uploads', filename)
-
-    with open(path, 'wb+') as destination:
-        for chunk in file.chunks():
-            destination.write(chunk)
-
-
-
-    os.remove(path)
