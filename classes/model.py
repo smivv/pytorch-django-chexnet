@@ -8,9 +8,10 @@ The main CheXNet model implementation.
 import os
 import json
 import torch
-import sklearn
+import numpy
 import torchvision.transforms as transforms
 
+from sklearn.metrics import roc_auc_score
 
 from classes.dataset import ChestXrayDataSet
 from classes.densenet import DenseNet121
@@ -18,7 +19,7 @@ from classes.densenet import DenseNet121
 
 N_CLASSES = 14
 
-CKPT_PATH = '/workspace/pytorch-chexnet/classes/model.pth.tar'
+CKPT_PATH = '/home/smirnvla/PycharmProjects/pytorch-chexnet/classes/model.pth.tar'
 
 CLASS_NAMES = ['Atelectasis', 'Cardiomegaly', 'Effusion', 'Infiltration', 'Mass', 'Nodule', 'Pneumonia',
                'Pneumothorax', 'Consolidation', 'Edema', 'Emphysema', 'Fibrosis', 'Pleural_Thickening', 'Hernia']
@@ -41,7 +42,7 @@ transform = transforms.Compose([
 ])
 
 
-def process(image_list=None):
+def process(image_list=None, auroc=False):
 
     if image_list is None:
         image_list = TEST_IMAGE_LIST
@@ -86,24 +87,26 @@ def process(image_list=None):
         output_mean = output.view(bs, n_crops, -1).mean(1)
         pred = torch.cat((pred, output_mean.data), 0)
 
-    # return pred
-    pred = pred.double().cpu().numpy()[0]
+    if not auroc:
+        # return pred
+        pred = pred.double().cpu().numpy()[0]
 
-    ret = []
-    i = 0
-    for class_name in CLASS_NAMES:
-        ret.append({
-            class_name: pred[i]
-        })
-        # ret[class_name] = pred[i]
-        i += 1
+        ret = []
+        i = 0
+        for class_name in CLASS_NAMES:
+            ret.append({
+                class_name: pred[i]
+            })
+            # ret[class_name] = pred[i]
+            i += 1
 
-    return json.dumps(ret, separators=(',', ':'), sort_keys=True, indent=4)
-    # AUROCs = compute_AUCs(gt, pred)
-    # AUROC_avg = np.array(AUROCs).mean()
-    # print('The average AUROC is {AUROC_avg:.3f}'.format(AUROC_avg=AUROC_avg))
-    # for i in range(N_CLASSES):
-    #     print('The AUROC of {} is {}'.format(CLASS_NAMES[i], AUROCs[i]))
+        return json.dumps(ret, separators=(',', ':'), sort_keys=True, indent=4)
+    else:
+        AUROCs = compute_AUCs(gt, pred)
+        AUROC_avg = numpy.array(AUROCs).mean()
+        print('The average AUROC is {AUROC_avg:.3f}'.format(AUROC_avg=AUROC_avg))
+        for i in range(N_CLASSES):
+            print('The AUROC of {} is {}'.format(CLASS_NAMES[i], AUROCs[i]))
 
 
 def compute_AUCs(gt, pred):
@@ -123,7 +126,6 @@ def compute_AUCs(gt, pred):
     gt_np = gt.cpu().numpy()
     pred_np = pred.cpu().numpy()
     for i in range(N_CLASSES):
-        AUROCs.append(sklearn.metrics.roc_auc_score(gt_np[:, i], pred_np[:, i]))
+        AUROCs.append(roc_auc_score(gt_np[:, i], pred_np[:, i]))
     return AUROCs
-
 
